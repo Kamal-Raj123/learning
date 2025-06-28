@@ -15,6 +15,8 @@ jobs:
 
       - name: Set up Docker
         uses: docker/setup-buildx-action@v3
+      
+
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -23,67 +25,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+      - name: Build Docker Image
+        run: docker build -t nginx:latest ./kamal
 
-      - name: Get Latest Git Tag and Bump Version
-        id: versioning
-        run: |
-          git fetch --tags
-          latestTag=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "v1.0")
-          echo "Latest Tag: $latestTag"
-
-          if [[ "$latestTag" =~ ^v([0-9]+)\.([0-9]+)$ ]]; then
-            major=${BASH_REMATCH[1]}
-            minor=${BASH_REMATCH[2]}
-            newMinor=$((minor + 1))
-            newTag="v${major}.${newMinor}"
-          else
-            newTag="v1.0"
-          fi
-
-          echo "NEW_TAG=$newTag" >> $GITHUB_ENV
-          echo "🆕 New version: $newTag"
-
-      - name: Build and Push Docker Image to ECR
+      - name: Tag Docker Image for ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: nginx-app
-          IMAGE_TAG: ${{ env.NEW_TAG }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag nginx:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      - name: Tag Code and Push
+      - name: Push Docker Image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: nginx-app
         run: |
-          git config --global user.name "kamal-automation"
-          git config --global user.email "actions@github.com"
-          git tag ${{ env.NEW_TAG }}
-          git push origin ${{ env.NEW_TAG }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      - name: Decode SSH Key for EC2
-        run: |
-          echo "${{ secrets.EC2_KEY }}" | base64 -d > ec2_key.pem
-          chmod 600 ec2_key.pem
-
-      - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_KEY }}
-          port: ${{ secrets.EC2_PORT || '22' }}
-          script: |
-            export IMAGE_TAG=${{ env.NEW_TAG }}
-            export IMAGE_NAME=${{ steps.login-ecr.outputs.registry }}/nginx-app:$IMAGE_TAG
-
-            echo "📦 Pulling new image: $IMAGE_NAME"
-            docker pull $IMAGE_NAME
-
-            echo "🛑 Stopping old container if exists"
-            docker stop my-app1 || true
-            docker rm my-app1 || true
-
-            echo "🚀 Running new container"
-            docker run -d --name my-app1 -p 81:80 $IMAGE_NAME
