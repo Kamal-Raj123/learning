@@ -35,9 +35,9 @@ jobs:
 
       - name: Tag Docker Image for ECR
         run: |
-          docker tag nginx:latest ${{ steps.login-ecr.outputs.registry }}/nginx-app:latest
+          docker tag nginx:latest ${{ steps.login-ecr.outputs.registry }}/kamalraj/ngnix:latest
 
       - name: Push Docker Image to ECR
         run: |
-          docker push ${{ steps.login-ecr.outputs.registry }}/nginx-app:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/kamalraj/ngnix:latest
 
