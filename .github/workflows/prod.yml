@@ -16,8 +16,6 @@ jobs:
       - name: Set up Docker
         uses: docker/setup-buildx-action@v3
       
-
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -28,17 +26,18 @@ jobs:
       - name: Build Docker Image
         run: docker build -t nginx:latest ./kamal
 
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Debug ECR Registry
+        run: echo "ECR_REGISTRY is ${{ steps.login-ecr.outputs.registry }}"
+
       - name: Tag Docker Image for ECR
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: nginx-app
         run: |
-          docker tag nginx:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker tag nginx:latest ${{ steps.login-ecr.outputs.registry }}/nginx-app:latest
 
       - name: Push Docker Image to ECR
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: nginx-app
         run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/nginx-app:latest
 
